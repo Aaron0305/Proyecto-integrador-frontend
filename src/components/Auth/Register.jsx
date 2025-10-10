@@ -402,13 +402,11 @@ export default function Register() {
               {isLoadingCarreras ? (
                 <MenuItem disabled>Cargando carreras...</MenuItem>
               ) : (
-                carreras
-                  .filter(carrera => carrera.nombre.toLowerCase().includes('sistemas'))
-                  .map((carrera) => (
-                    <MenuItem key={carrera._id} value={carrera._id}>
-                      {carrera.nombre}
-                    </MenuItem>
-                  ))
+                carreras.map((carrera) => (
+                  <MenuItem key={carrera._id} value={carrera._id}>
+                    {carrera.nombre}
+                  </MenuItem>
+                ))
               )}
             </AnimatedTextField>
 
