@@ -26,6 +26,9 @@ import {
 } from '@mui/icons-material';
 import { theme } from '../../theme/palette';
 import ForgotPasswordLink from './ForgotPasswordLink';
+import ReCAPTCHA from 'react-google-recaptcha';
+
+const SITE_KEY = '6LeDf_grAAAAAPjAiCIpWt6jbN0F0xRt02rGx_oQ'; // Clave pública de reCAPTCHA v2 actualizada
 
 // Componente de campo de entrada animado
 const AnimatedTextField = ({ label, type, value, onChange, icon, endAdornment, ...props }) => {
@@ -84,6 +87,7 @@ export default function Login() {
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState('');
   
   // Obtenemos currentUser del contexto para verificar si ya hay una sesión activa
   const { login, currentUser } = useContext(AuthContext);
@@ -114,9 +118,16 @@ export default function Login() {
       return;
     }
 
+    // Validar reCAPTCHA
+    if (!recaptchaToken) {
+      setError('Por favor completa el reCAPTCHA');
+      setLoading(false);
+      return;
+    }
+
     try {
       // login debe lanzar error si falla, o devolver usuario/token si es correcto
-      const result = await login(email, password);
+      const result = await login(email, password, recaptchaToken);
       if (result && result.success) {
         setSuccess(true);
         // Redirigir según el rol del usuario
@@ -195,7 +206,7 @@ export default function Login() {
               <Fade in={true} timeout={1000}>
                 <Typography 
                   variant="h4" 
-                  component="body1" 
+                  component="div" 
                   gutterBottom
                   sx={{ 
                     fontWeight: 600,
@@ -296,6 +307,12 @@ export default function Login() {
               />
 
               <ForgotPasswordLink />
+
+              <ReCAPTCHA
+                sitekey={SITE_KEY}
+                onChange={(token) => setRecaptchaToken(token)}
+                style={{ margin: '16px 0' }}
+              />
 
               <Zoom in={true} style={{ transitionDelay: '600ms' }}>
                 <Button

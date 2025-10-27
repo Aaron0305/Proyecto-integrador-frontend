@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 import apiClient, { API_CONFIG } from '../config/api.js';
 import setupAxiosInterceptors from '../utils/axiosDebugger';
 
@@ -14,12 +14,13 @@ export const AuthProvider = ({ children }) => {
     setupAxiosInterceptors();
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (email, password, captchaToken) => {
     try {
-              const response = await apiClient.post('/api/auth/login', {
-        email,
-        password
-      });
+    const response = await apiClient.post('/api/auth/login', {
+      email,
+      password,
+      captchaToken
+    });
 
       const { token, user } = response.data;
       if (token) {
@@ -70,7 +71,7 @@ export const AuthProvider = ({ children }) => {
     setRetryCount(0);
   };
 
-  const verifyToken = async () => {
+  const verifyToken = useCallback(async () => {
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
     
@@ -95,7 +96,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-              const response = await apiClient.get('/api/auth/verify', {
+      const response = await apiClient.get('/api/auth/verify', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -122,17 +123,17 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(null);
       setLoading(false);
     }
-  };
+  }, [retryCount]);
 
   useEffect(() => {
     verifyToken();
-  }, []);
+  }, [verifyToken]);
 
   // Verificar el token cada 5 minutos
   useEffect(() => {
     const interval = setInterval(verifyToken, 300000); // 5 minutos
     return () => clearInterval(interval);
-  }, []);
+  }, [verifyToken]);
 
   const updateUserProfile = async () => {
     await verifyToken(); // Usar la misma función de verificación

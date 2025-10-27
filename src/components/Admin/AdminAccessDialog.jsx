@@ -23,7 +23,7 @@ import {
 import { styled } from '@mui/material/styles';
 
 // Estilo personalizado para el diálogo
-const StyledDialog = styled(Dialog)(({ theme }) => ({
+const StyledDialog = styled(Dialog)(() => ({
   '& .MuiDialog-paper': {
     borderRadius: '16px',
     background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
