@@ -27,8 +27,7 @@ import {
 import { theme } from '../../theme/palette';
 import ForgotPasswordLink from './ForgotPasswordLink';
 import ReCAPTCHA from 'react-google-recaptcha';
-
-const SITE_KEY = '6LeDf_grAAAAAPjAiCIpWt6jbN0F0xRt02rGx_oQ'; // Clave pública de reCAPTCHA v2 actualizada
+const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6LccyvsrAAAAAPNhIOvetTXBcp_h8Rh1oU4Sq062';
 
 // Componente de campo de entrada animado
 const AnimatedTextField = ({ label, type, value, onChange, icon, endAdornment, ...props }) => {
@@ -118,7 +117,7 @@ export default function Login() {
       return;
     }
 
-    // Validar reCAPTCHA
+    // Validar token de reCAPTCHA v2 (widget visible)
     if (!recaptchaToken) {
       setError('Por favor completa el reCAPTCHA');
       setLoading(false);
@@ -310,7 +309,7 @@ export default function Login() {
 
               <ReCAPTCHA
                 sitekey={SITE_KEY}
-                onChange={(token) => setRecaptchaToken(token)}
+                onChange={(token) => setRecaptchaToken(token || '')}
                 style={{ margin: '16px 0' }}
               />
 
