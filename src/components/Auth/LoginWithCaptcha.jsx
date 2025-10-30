@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import ReCAPTCHA from 'react-google-recaptcha';
 
-const SITE_KEY = 'TU_SITE_KEY_AQUI'; // Reemplaza por tu clave pública de reCAPTCHA
+const SITE_KEY = '6LccyvsrAAAAAPNhIOvetTXBcp_h8Rh1oU4Sq062'; // Clave del sitio de reCAPTCHA
 
 export default function LoginWithCaptcha({ onSubmit }) {
   const [captchaToken, setCaptchaToken] = useState(null);
