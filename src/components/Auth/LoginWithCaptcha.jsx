@@ -1,36 +1,58 @@
-// Este componente muestra el captcha de Google reCAPTCHA v2 y lo integra con el formulario de login
+// Este componente integra reCAPTCHA v3 con el formulario de login
 import React, { useState } from 'react';
-import ReCAPTCHA from 'react-google-recaptcha';
-
-const SITE_KEY = '6LccyvsrAAAAAPNhIOvetTXBcp_h8Rh1oU4Sq062'; // Clave del sitio de reCAPTCHA
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 export default function LoginWithCaptcha({ onSubmit }) {
-  const [captchaToken, setCaptchaToken] = useState(null);
   const [form, setForm] = useState({ email: '', password: '' });
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const handleChange = e => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleCaptcha = token => {
-    setCaptchaToken(token);
-  };
-
-  const handleSubmit = e => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!captchaToken) {
-      alert('Por favor resuelve el captcha');
+    if (!executeRecaptcha) {
+      console.error('reCAPTCHA no está disponible');
       return;
     }
-    onSubmit({ ...form, captchaToken });
+
+    try {
+      const captchaToken = await executeRecaptcha('login');
+      onSubmit({ ...form, captchaToken });
+    } catch (error) {
+      console.error('Error al ejecutar reCAPTCHA:', error);
+      alert('Error al verificar reCAPTCHA. Por favor, intenta de nuevo.');
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input name="email" type="email" placeholder="Correo" value={form.email} onChange={handleChange} required />
-      <input name="password" type="password" placeholder="Contraseña" value={form.password} onChange={handleChange} required />
-      <ReCAPTCHA sitekey={SITE_KEY} onChange={handleCaptcha} />
-      <button type="submit">Iniciar sesión</button>
+    <form onSubmit={handleSubmit} className="login-form">
+      <div className="form-group">
+        <input 
+          name="email" 
+          type="email" 
+          placeholder="Correo" 
+          value={form.email} 
+          onChange={handleChange} 
+          required 
+          className="form-control"
+        />
+      </div>
+      <div className="form-group">
+        <input 
+          name="password" 
+          type="password" 
+          placeholder="Contraseña" 
+          value={form.password} 
+          onChange={handleChange} 
+          required 
+          className="form-control"
+        />
+      </div>
+      <button type="submit" className="btn btn-primary">
+        Iniciar sesión
+      </button>
     </form>
   );
 }
