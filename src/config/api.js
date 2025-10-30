@@ -1,10 +1,10 @@
 // Configuración de la API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://backend-cloud-flame.vercel.app';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://proyecto-integrador-backend-six.vercel.app';
 
 // URLs específicas para diferentes entornos
 const API_URLS = {
   development: 'http://localhost:3001',
-  production: 'https://backend-cloud-flame.vercel.app'
+  production: 'https://proyecto-integrador-backend-six.vercel.app'
 };
 
 // Determinar el entorno actual
