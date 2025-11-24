@@ -46,7 +46,6 @@ import {
 } from '@mui/icons-material';
 import { theme } from '../../theme/palette';
 
-// Componente de campo de entrada animado
 const AnimatedTextField = ({ label, type, value, onChange, icon, endAdornment, select, children, ...props }) => {
   return (
     <Grow in={true} style={{ transformOrigin: '0 0 0' }} timeout={700}>
@@ -112,7 +111,7 @@ export default function Register() {
     apellidoPaterno: '',
     apellidoMaterno: '',
     carrera: '',
-    role: '',  // Quitamos el valor por defecto para que el usuario deba seleccionar
+    role: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -129,7 +128,6 @@ export default function Register() {
   const { register, checkEmailExists, checkNumeroControlExists } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  // Efecto para cargar carreras
   useEffect(() => {
     const fetchCarreras = async () => {
       setIsLoadingCarreras(true);
@@ -139,7 +137,6 @@ export default function Register() {
           throw new Error('Error al cargar carreras');
         }
         const data = await response.json();
-        console.log('Carreras recibidas:', data);
         if (Array.isArray(data)) {
           setCarreras(data);
         } else {
@@ -165,7 +162,6 @@ export default function Register() {
     setError('');
   };
 
-  // Verificación de email al perder el foco
   const handleEmailBlur = async () => {
     if (formData.email.trim() !== '') {
       const emailRegex = /^[a-zA-Z0-9._%+-]+@tesjo\.edu\.mx$/;
@@ -184,7 +180,6 @@ export default function Register() {
     }
   };
 
-  // Verificación de número de control al perder el foco
   const handleNumeroControlBlur = async () => {
     if (formData.numeroControl.trim() !== '') {
       const numeroControlRegex = /^[0-9A-Z]{10,15}$/; 
@@ -213,7 +208,6 @@ export default function Register() {
 
   const handleNumeroControlChange = (e) => {
     const { value } = e.target;
-    // Solo permitir números
     const numeroControl = value.replace(/[^0-9A-Z]/g, '');
     if (numeroControl.length <= 15) {
       setFormData({ 
@@ -227,7 +221,7 @@ export default function Register() {
   const handleFotoChange = (event) => {
     const file = event.target.files[0];
     if (file) {
-      if (file.size > 5000000) { // 5MB limit
+      if (file.size > 5000000) {
         setError('La imagen no debe superar los 5MB');
         return;
       }
@@ -240,17 +234,12 @@ export default function Register() {
     }
   };
 
-  // Funciones auxiliares para WebAuthn
+  // CORRECCIÓN: Usar Uint8Array en lugar de Buffer.from para mejor compatibilidad
   const base64UrlToArrayBuffer = (base64Url) => {
-    // Convertir base64url a base64
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = base64.length % 4;
-    const paddedBase64 = base64 + '='.repeat(pad === 0 ? 0 : 4 - pad);
+    const paddedBase64 = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
     
-    // Convertir base64 a binario string
     const binaryString = window.atob(paddedBase64);
-    
-    // Convertir binario string a ArrayBuffer
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
@@ -258,18 +247,17 @@ export default function Register() {
     return bytes.buffer;
   };
 
+  // CORRECCIÓN: Asegurar que siempre devuelva base64url válido
   const arrayBufferToBase64Url = (buffer) => {
-    const bytes = new Uint8Array(buffer);
+    const view = new Uint8Array(buffer);
     let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < view.byteLength; i++) {
+      binary += String.fromCharCode(view[i]);
     }
     const base64 = window.btoa(binary);
-    // Convertir base64 a base64url
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   };
 
-  // Función para verificar si WebAuthn está disponible
   const isWebAuthnAvailable = () => {
     return (
       typeof window !== 'undefined' &&
@@ -285,7 +273,6 @@ export default function Register() {
     setError('');
     
     try {
-      // Verificar si WebAuthn está disponible
       if (!isWebAuthnAvailable()) {
         throw new Error(
           'Tu navegador no soporta autenticación biométrica. ' +
@@ -293,31 +280,30 @@ export default function Register() {
         );
       }
 
-      // Validar que el usuario tenga email (necesario para WebAuthn)
       if (!formData.email || !formData.email.trim()) {
-        throw new Error('Por favor, ingresa tu correo electrónico primero para registrar la huella digital.');
+        throw new Error('Por favor, ingresa tu correo electrónico primero.');
       }
 
+      console.log('Iniciando registro de huella digital para:', formData.email);
+
       // Obtener el challenge del backend
-      // NOTA: Esta ruta aún no existe en el backend, la crearemos después
       const challengeResponse = await apiClient.post(`${API_CONFIG.WEBAUTHN_URL}/register/begin`, {
         email: formData.email,
         username: `${formData.nombre} ${formData.apellidoPaterno}`.trim() || formData.email
       });
 
       if (!challengeResponse.data.success) {
-        throw new Error(challengeResponse.data.message || 'Error al iniciar el registro de huella');
+        throw new Error(challengeResponse.data.message || 'Error al iniciar el registro');
       }
 
       const { challenge, user, rp } = challengeResponse.data;
 
-      // Convertir el challenge de base64url a ArrayBuffer
-      const challengeArrayBuffer = base64UrlToArrayBuffer(challenge);
+      console.log('Challenge recibido:', challenge);
 
-      // Convertir el user.id de base64url a ArrayBuffer
+      // Convertir base64url a ArrayBuffer
+      const challengeArrayBuffer = base64UrlToArrayBuffer(challenge);
       const userIdArrayBuffer = base64UrlToArrayBuffer(user.id);
 
-      // Preparar las opciones para crear la credencial
       const publicKeyCredentialCreationOptions = {
         challenge: challengeArrayBuffer,
         rp: {
@@ -327,35 +313,36 @@ export default function Register() {
         user: {
           id: userIdArrayBuffer,
           name: user.name || formData.email,
-          displayName: user.displayName || `${formData.nombre} ${formData.apellidoPaterno}`.trim() || formData.email,
+          displayName: user.displayName || formData.email,
         },
         pubKeyCredParams: [
-          { alg: -7, type: 'public-key' }, // ES256
-          { alg: -257, type: 'public-key' }, // RS256
+          { alg: -7, type: 'public-key' },
+          { alg: -257, type: 'public-key' },
         ],
         authenticatorSelection: {
-          authenticatorAttachment: 'platform', // Usar autenticador integrado (huella del dispositivo)
+          authenticatorAttachment: 'platform',
           userVerification: 'required',
           requireResidentKey: false,
         },
-        timeout: 60000, // 60 segundos
+        timeout: 60000,
         attestation: 'direct',
       };
 
-      // Solicitar al navegador crear la credencial (el usuario pondrá su huella)
+      console.log('Opciones de creación:', publicKeyCredentialCreationOptions);
+
       let credential;
       try {
         credential = await navigator.credentials.create({
           publicKey: publicKeyCredentialCreationOptions,
         });
       } catch (webauthnError) {
-        // Manejar errores específicos de WebAuthn
+        console.error('Error de WebAuthn:', webauthnError);
         if (webauthnError.name === 'NotAllowedError') {
-          throw new Error('Registro cancelado o el dispositivo no está disponible. Por favor, intenta de nuevo.');
+          throw new Error('Registro cancelado o el dispositivo no está disponible.');
         } else if (webauthnError.name === 'InvalidStateError') {
-          throw new Error('Ya existe una huella registrada para este dispositivo. Por favor, usa otro dispositivo o elimina la credencial existente.');
+          throw new Error('Ya existe una huella registrada para este dispositivo.');
         } else if (webauthnError.name === 'NotSupportedError') {
-          throw new Error('Tu dispositivo no soporta autenticación biométrica. Por favor, usa un dispositivo compatible.');
+          throw new Error('Tu dispositivo no soporta autenticación biométrica.');
         } else if (webauthnError.name === 'SecurityError') {
           throw new Error('Error de seguridad. Asegúrate de estar usando HTTPS o localhost.');
         } else {
@@ -363,10 +350,16 @@ export default function Register() {
         }
       }
 
-      // Convertir la respuesta a un formato que el backend pueda entender
+      if (!credential) {
+        throw new Error('No se recibió credencial del dispositivo');
+      }
+
+      console.log('Credencial recibida:', credential);
+
+      // CORRECCIÓN CRÍTICA: Convertir correctamente la credencial
       const response = {
         id: credential.id,
-        rawId: arrayBufferToBase64Url(credential.rawId),
+        rawId: arrayBufferToBase64Url(credential.rawId), // CORRECCIÓN: debe ser base64url
         type: credential.type,
         response: {
           clientDataJSON: arrayBufferToBase64Url(credential.response.clientDataJSON),
@@ -374,25 +367,30 @@ export default function Register() {
         },
       };
 
-      // Enviar la respuesta al backend para validación y almacenamiento
-      // NOTA: Esta ruta aún no existe en el backend, la crearemos después
+      console.log('Respuesta convertida a enviar:', {
+        ...response,
+        rawId: response.rawId.substring(0, 20) + '...', // Solo mostrar parte para logs
+      });
+
+      // Enviar al backend
       const verifyResponse = await apiClient.post(`${API_CONFIG.WEBAUTHN_URL}/register/complete`, {
         email: formData.email,
         credential: response,
       });
 
+      console.log('Respuesta del servidor:', verifyResponse.data);
+
       if (!verifyResponse.data.success) {
-        throw new Error(verifyResponse.data.message || 'Error al verificar la huella digital');
+        throw new Error(verifyResponse.data.message || 'Error al verificar la huella');
       }
 
-      // Guardar el ID de la credencial para enviarlo con el registro del usuario
       setWebauthnCredentialId(verifyResponse.data.credentialId);
       setFingerprintRegistered(true);
+      setError('');
 
     } catch (err) {
       console.error('Error al registrar huella:', err);
       
-      // Mostrar mensaje de error más específico
       if (err.response?.data?.message) {
         setError(err.response.data.message);
       } else if (err.message) {
@@ -428,7 +426,7 @@ export default function Register() {
     
     try {
       if (!formData.role) {
-        throw new Error('Por favor selecciona un rol (Docente o Administrador)');
+        throw new Error('Por favor selecciona un rol');
       }
 
       if (!fingerprintRegistered) {
@@ -436,29 +434,24 @@ export default function Register() {
       }
 
       if (!webauthnCredentialId) {
-        throw new Error('No se encontró el ID de la credencial de huella digital. Por favor, registra tu huella nuevamente.');
+        throw new Error('No se encontró el ID de credencial. Registra tu huella nuevamente.');
       }
 
       const formDataToSend = new FormData();
       
-      // Asegurarnos que el role se envía correctamente
       Object.keys(formData).forEach(key => {
         if (key !== 'confirmPassword') {
           formDataToSend.append(key, formData[key]);
         }
       });
       
-      // Agregar el ID de la credencial WebAuthn
       formDataToSend.append('webauthnCredentialId', webauthnCredentialId);
       
       if (foto) {
         formDataToSend.append('fotoPerfil', foto);
       }
 
-      console.log('Datos de registro a enviar:', Object.fromEntries(formDataToSend));
-      
       const response = await register(formDataToSend);
-      console.log('Respuesta del registro:', response);
       
       if (!response.success) {
         throw new Error(response.message || 'Error en el registro');
@@ -538,10 +531,6 @@ export default function Register() {
               onBlur={handleNumeroControlBlur}
               required
               icon={<Badge />}
-              inputProps={{
-                maxLength: 15,
-                pattern: '[^0-9A-Z]*'
-              }}
               helperText="Ingresa tu Empleado (10-15 caracteres)"
             />
             <AnimatedTextField
@@ -605,10 +594,6 @@ export default function Register() {
                 <MenuItem value="docente">Docente</MenuItem>
                 <MenuItem value="admin">Administrador</MenuItem>
               </Select>
-              <FormHelperText>
-                {!formData.role ? 'Por favor selecciona un rol' : 
-                 formData.role === 'admin' ? 'Rol de administrador seleccionado' : 'Rol de docente seleccionado'}
-              </FormHelperText>
             </FormControl>
           </Box>
         );
@@ -664,21 +649,6 @@ export default function Register() {
                 </InputAdornment>
               }
             />
-            <FormControl fullWidth required sx={{ mt: 2 }}>
-              <InputLabel>Rol</InputLabel>
-              <Select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                required
-              >
-                <MenuItem value="docente">Docente</MenuItem>
-                <MenuItem value="admin">Administrador</MenuItem>
-              </Select>
-              <FormHelperText>
-                {!formData.role ? 'Por favor selecciona un rol' : ''}
-              </FormHelperText>
-            </FormControl>
 
             <Box sx={{ mt: 3, mb: 2 }}>
               <Grow in={true} style={{ transformOrigin: '0 0 0' }} timeout={700}>
@@ -698,17 +668,12 @@ export default function Register() {
                   {!fingerprintRegistered ? (
                     <>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Es obligatorio registrar tu huella digital para completar el registro.
-                        <br />
-                        <Typography component="span" variant="caption" color="text.secondary">
-                          Usará la autenticación biométrica de tu dispositivo (huella dactilar o Face ID).
-                        </Typography>
+                        Es obligatorio registrar tu huella digital.
                       </Typography>
                       
                       {!isWebAuthnAvailable() && (
                         <Alert severity="warning" sx={{ mb: 2, textAlign: 'left' }}>
-                          Tu navegador podría no soportar autenticación biométrica. 
-                          Asegúrate de usar Chrome, Firefox, Edge o Safari (versión 14+).
+                          Tu navegador podría no soportar autenticación biométrica.
                         </Alert>
                       )}
 
@@ -717,7 +682,7 @@ export default function Register() {
                         color="primary"
                         startIcon={<Fingerprint />}
                         onClick={handleRegisterFingerprint}
-                        disabled={isRegisteringFingerprint || !formData.role || !formData.email}
+                        disabled={isRegisteringFingerprint || !formData.email}
                         sx={{
                           minWidth: 250,
                           py: 1.5,
@@ -734,22 +699,12 @@ export default function Register() {
                           'Registrar Huella Digital'
                         )}
                       </Button>
-                      {!formData.role && (
-                        <Typography variant="caption" color="error" display="block" sx={{ mt: 1 }}>
-                          Por favor selecciona un rol primero
-                        </Typography>
-                      )}
-                      {!formData.email && (
-                        <Typography variant="caption" color="error" display="block" sx={{ mt: 1 }}>
-                          Por favor ingresa tu correo electrónico primero
-                        </Typography>
-                      )}
                     </>
                   ) : (
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                       <Fingerprint sx={{ fontSize: 48, color: theme.palette.success.main }} />
                       <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
-                        Huella digital registrada correctamente
+                        Huella digital registrada ✓
                       </Typography>
                       <Button
                         variant="outlined"
@@ -831,7 +786,7 @@ export default function Register() {
                       variant="filled"
                       sx={{ mt: 2 }}
                     >
-                      ¡Registro exitoso! Redirigiendo al inicio de sesión...
+                      ¡Registro exitoso! Redirigiendo...
                     </Alert>
                   </Grow>
                 )}
