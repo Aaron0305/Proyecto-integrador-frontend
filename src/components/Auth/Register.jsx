@@ -356,9 +356,32 @@ export default function Register() {
 
       console.log('Credencial recibida:', credential);
 
+      // CORRECCIÓN CRÍTICA: Normalizar credential.id a base64url válido
+      // Diferentes navegadores devuelven credential.id en distintos formatos:
+      // - Chrome: a veces base64 normal (con +, /, =)
+      // - Firefox: a veces ya es base64url
+      // - Safari: puede ser Uint8Array
+      let credentialId = credential.id;
+      
+      if (credential.id instanceof ArrayBuffer || credential.id instanceof Uint8Array) {
+        // Si es buffer, convertir a base64url
+        credentialId = arrayBufferToBase64Url(credential.id);
+        console.log('[WebAuthn] credential.id era Uint8Array/ArrayBuffer, convertido a base64url');
+      } else if (typeof credential.id === 'string') {
+        // Si es string, normalizar a base64url
+        // Remover caracteres de padding y convertir caracteres base64 especiales
+        credentialId = credential.id
+          .replace(/\+/g, '-')      // + -> -
+          .replace(/\//g, '_')      // / -> _
+          .replace(/=/g, '');       // eliminar padding =
+        console.log('[WebAuthn] credential.id normalizado de string a base64url');
+      }
+      
+      console.log('[WebAuthn] credentialId final (primeros 40 chars):', credentialId.substring(0, 40));
+
       // CORRECCIÓN CRÍTICA: Convertir correctamente la credencial
       const response = {
-        id: credential.id,
+        id: credentialId,  // ✅ Ahora es base64url válido
         rawId: arrayBufferToBase64Url(credential.rawId), // CORRECCIÓN: debe ser base64url
         type: credential.type,
         response: {
