@@ -1,10 +1,10 @@
 // Configuración de la API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://proyecto-integrador-backend-six.vercel.app';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://proyecto-integrador-backend-2nb1.onrender.com';
 
 // URLs específicas para diferentes entornos
 const API_URLS = {
   development: 'http://localhost:3001',
-  production: 'https://proyecto-integrador-backend-six.vercel.app'
+  production: 'https://proyecto-integrador-backend-2nb1.onrender.com'
 };
 
 // Determinar el entorno actual
