@@ -59,7 +59,8 @@ export const API_CONFIG = {
   SEMESTRES_URL: `${currentAPIUrl}/api/semestres`,
   STATS_URL: `${currentAPIUrl}/api/stats`,
   FILES_URL: `${currentAPIUrl}/api/files`,
-  HOURS_URL: `${currentAPIUrl}/api/hours`
+  HOURS_URL: `${currentAPIUrl}/api/hours`,
+  WEBAUTHN_URL: `${currentAPIUrl}/api/webauthn`
 };
 
 export default apiClient;

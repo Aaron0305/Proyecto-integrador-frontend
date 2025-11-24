@@ -15,62 +15,21 @@ import {
   ThemeProvider,
   Grow,
   Zoom,
-  Fade,
-  Divider,
-  Chip
+  Fade
 } from '@mui/material';
 import {
   Visibility,
   VisibilityOff,
   Email,
   Lock,
-  KeyboardArrowRight,
-  Fingerprint,
-  CheckCircle
+  KeyboardArrowRight
 } from '@mui/icons-material';
 import { theme } from '../../theme/palette';
 import ForgotPasswordLink from './ForgotPasswordLink';
 import ReCAPTCHA from 'react-google-recaptcha';
-
 const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6LccyvsrAAAAAPNhIOvetTXBcp_h8Rh1oU4Sq062';
 
-// ============================================
-// HOOK PERSONALIZADO PARA DETECCIÓN DE BIOMETRÍA
-// ============================================
-const useBiometricSupport = () => {
-  const [isSupported, setIsSupported] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
-
-  useEffect(() => {
-    const checkSupport = async () => {
-      try {
-        // Verificar si el navegador soporta Credential Management API
-        if (!window.PublicKeyCredential) {
-          setIsSupported(false);
-          setIsChecking(false);
-          return;
-        }
-
-        // Verificar si hay autenticador biométrico disponible
-        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        setIsSupported(available);
-      } catch (error) {
-        console.error('Error checking biometric support:', error);
-        setIsSupported(false);
-      } finally {
-        setIsChecking(false);
-      }
-    };
-
-    checkSupport();
-  }, []);
-
-  return { isSupported, isChecking };
-};
-
-// ============================================
-// COMPONENTE DE CAMPO DE ENTRADA ANIMADO
-// ============================================
+// Componente de campo de entrada animado
 const AnimatedTextField = ({ label, type, value, onChange, icon, endAdornment, ...props }) => {
   return (
     <Grow in={true} style={{ transformOrigin: '0 0 0' }} timeout={700}>
@@ -120,11 +79,7 @@ const AnimatedTextField = ({ label, type, value, onChange, icon, endAdornment, .
   );
 };
 
-// ============================================
-// COMPONENTE PRINCIPAL - LOGIN
-// ============================================
 export default function Login() {
-  // Estados del formulario tradicional
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -133,34 +88,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState('');
   
-  // Estados para biometría
-  const [biometricLoading, setBiometricLoading] = useState(false);
-  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
-  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
-  
+  // Obtenemos currentUser del contexto para verificar si ya hay una sesión activa
   const { login, currentUser } = useContext(AuthContext);
   const navigate = useNavigate();
-  const { isSupported: biometricSupported, isChecking: checkingBiometric } = useBiometricSupport();
   
-  // ============================================
-  // EFECTO: Verificar si hay credenciales guardadas
-  // ============================================
-  useEffect(() => {
-    const checkSavedCredentials = () => {
-      const savedEmail = localStorage.getItem('biometric_email');
-      if (savedEmail && biometricSupported) {
-        setHasSavedCredentials(true);
-      }
-    };
-    
-    if (!checkingBiometric) {
-      checkSavedCredentials();
-    }
-  }, [biometricSupported, checkingBiometric]);
-  
-  // ============================================
-  // EFECTO: Redirigir si ya hay sesión activa
-  // ============================================
+  // Redirigir si ya hay una sesión activa según el rol
   useEffect(() => {
     if (currentUser) {
       const redirectPath = currentUser.role === 'admin' ? '/admin-structure' : '/dashboard';
@@ -168,145 +100,10 @@ export default function Login() {
     }
   }, [currentUser, navigate]);
 
-  // ============================================
-  // FUNCIÓN: Mostrar/ocultar contraseña
-  // ============================================
   const handleShowPassword = () => {
     setShowPassword(!showPassword);
   };
 
-  // ============================================
-  // FUNCIÓN: Guardar credenciales con biometría
-  // ============================================
-  const saveBiometricCredentials = async (userEmail, userPassword) => {
-    try {
-      // Guardar email en localStorage como referencia
-      localStorage.setItem('biometric_email', userEmail);
-      localStorage.setItem('biometric_enabled', 'true');
-      
-      // Intentar usar Password Credential API (navegadores modernos)
-      if (window.PasswordCredential) {
-        const cred = new PasswordCredential({
-          id: userEmail,
-          password: userPassword,
-          name: userEmail
-        });
-        
-        await navigator.credentials.store(cred);
-        console.log('Credenciales guardadas con PasswordCredential API');
-      } else {
-        // Fallback: guardar en localStorage (el navegador lo encripta)
-        const encodedPassword = btoa(userPassword);
-        localStorage.setItem('biometric_cred', encodedPassword);
-        console.log('Credenciales guardadas en localStorage');
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Error saving biometric credentials:', error);
-      return false;
-    }
-  };
-
-  // ============================================
-  // FUNCIÓN: Recuperar credenciales con biometría
-  // ============================================
-  const getBiometricCredentials = async () => {
-    try {
-      const savedEmail = localStorage.getItem('biometric_email');
-      
-      if (!savedEmail) {
-        throw new Error('No hay credenciales guardadas');
-      }
-
-      // Intentar recuperar con Password Credential API
-      if (window.PasswordCredential) {
-        const cred = await navigator.credentials.get({
-          password: true,
-          mediation: 'required' // Fuerza autenticación biométrica del sistema
-        });
-        
-        if (cred && cred.password) {
-          console.log('Credenciales recuperadas con PasswordCredential API');
-          return {
-            email: cred.id,
-            password: cred.password
-          };
-        }
-      }
-      
-      // Fallback: recuperar de localStorage
-      const encodedPassword = localStorage.getItem('biometric_cred');
-      if (encodedPassword) {
-        console.log('Credenciales recuperadas de localStorage');
-        return {
-          email: savedEmail,
-          password: atob(encodedPassword)
-        };
-      }
-      
-      throw new Error('No se pudieron recuperar las credenciales');
-    } catch (error) {
-      console.error('Error getting biometric credentials:', error);
-      throw error;
-    }
-  };
-
-  // ============================================
-  // FUNCIÓN: Login con huella digital
-  // ============================================
-  const handleBiometricLogin = async () => {
-    setBiometricLoading(true);
-    setError('');
-    setSuccess(false);
-
-    try {
-      // Recuperar credenciales guardadas (esto activa la biometría del dispositivo)
-      const credentials = await getBiometricCredentials();
-      
-      if (!credentials) {
-        throw new Error('No se pudieron recuperar las credenciales');
-      }
-
-      // Usar el último token de reCAPTCHA válido guardado
-      const savedToken = localStorage.getItem('last_recaptcha_token') || recaptchaToken;
-      
-      // Hacer login con el backend
-      const result = await login(credentials.email, credentials.password, savedToken);
-      
-      if (result && result.success) {
-        setSuccess(true);
-        setTimeout(() => {
-          navigate(result.redirectPath || '/', { replace: true });
-        }, 1000);
-      } else {
-        throw new Error('Error en la autenticación');
-      }
-    } catch (err) {
-      let msg = 'Error al autenticar con huella digital';
-      
-      // Si no hay credenciales guardadas, limpiar todo
-      if (err.message.includes('credenciales')) {
-        msg = 'No hay credenciales guardadas. Inicia sesión normalmente primero.';
-        setHasSavedCredentials(false);
-        localStorage.removeItem('biometric_email');
-        localStorage.removeItem('biometric_enabled');
-        localStorage.removeItem('biometric_cred');
-      } else if (err.response?.data?.message) {
-        msg = err.response.data.message;
-      } else if (err.message) {
-        msg = err.message;
-      }
-      
-      setError(msg);
-    } finally {
-      setBiometricLoading(false);
-    }
-  };
-
-  // ============================================
-  // FUNCIÓN: Login tradicional (con email y password)
-  // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -320,6 +117,7 @@ export default function Login() {
       return;
     }
 
+    // Validar token de reCAPTCHA v2 (widget visible)
     if (!recaptchaToken) {
       setError('Por favor completa el reCAPTCHA');
       setLoading(false);
@@ -327,35 +125,23 @@ export default function Login() {
     }
 
     try {
-      // Hacer login con el backend
+      // login debe lanzar error si falla, o devolver usuario/token si es correcto
       const result = await login(email, password, recaptchaToken);
-      
       if (result && result.success) {
         setSuccess(true);
-        
-        // Guardar token de reCAPTCHA para uso futuro con biometría
-        localStorage.setItem('last_recaptcha_token', recaptchaToken);
-        
-        // Si hay soporte biométrico y no tiene credenciales guardadas, preguntar
-        if (biometricSupported && !hasSavedCredentials) {
-          setShowBiometricPrompt(true);
-        } else if (hasSavedCredentials) {
-          // Actualizar credenciales guardadas si ya existen
-          await saveBiometricCredentials(email, password);
-        }
-        
-        // Redirigir según el rol
+        // Redirigir según el rol del usuario
         setTimeout(() => {
           navigate(result.redirectPath || '/', { replace: true });
-        }, showBiometricPrompt ? 3000 : 1000);
+        }, 1000);
       } else {
         setError('Usuario o contraseña incorrectos');
       }
     } catch (err) {
+      // Mejor manejo del error
       let msg = 'Usuario o contraseña incorrectos';
-      if (err?.response?.data?.message) {
+      if (err && err.response && err.response.data && err.response.data.message) {
         msg = err.response.data.message;
-      } else if (err?.message) {
+      } else if (err && err.message) {
         msg = err.message;
       }
       setError(msg);
@@ -364,32 +150,6 @@ export default function Login() {
     }
   };
 
-  // ============================================
-  // FUNCIÓN: Activar biometría después del login
-  // ============================================
-  const enableBiometric = async () => {
-    const saved = await saveBiometricCredentials(email, password);
-    if (saved) {
-      setHasSavedCredentials(true);
-      setShowBiometricPrompt(false);
-    }
-  };
-
-  // ============================================
-  // FUNCIÓN: Desactivar biometría
-  // ============================================
-  const disableBiometric = () => {
-    localStorage.removeItem('biometric_email');
-    localStorage.removeItem('biometric_enabled');
-    localStorage.removeItem('biometric_cred');
-    localStorage.removeItem('last_recaptcha_token');
-    setHasSavedCredentials(false);
-    setShowBiometricPrompt(false);
-  };
-
-  // ============================================
-  // RENDER DEL COMPONENTE
-  // ============================================
   return (
     <ThemeProvider theme={theme}>
       <Container 
@@ -423,7 +183,6 @@ export default function Login() {
               }
             }}
           >
-            {/* HEADER */}
             <Box sx={{ 
               p: 4, 
               bgcolor: theme.palette.primary.main, 
@@ -464,7 +223,6 @@ export default function Login() {
               </Fade>
             </Box>
 
-            {/* FORMULARIO */}
             <Box 
               component="form" 
               onSubmit={handleSubmit} 
@@ -475,42 +233,6 @@ export default function Login() {
                 gap: 2
               }}
             >
-              {/* PROMPT PARA ACTIVAR BIOMETRÍA */}
-              {showBiometricPrompt && (
-                <Grow in={showBiometricPrompt} timeout={500}>
-                  <Alert 
-                    severity="info"
-                    icon={<Fingerprint />}
-                    action={
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button 
-                          color="inherit" 
-                          size="small" 
-                          onClick={enableBiometric}
-                          sx={{ fontWeight: 600 }}
-                        >
-                          Activar
-                        </Button>
-                        <Button 
-                          color="inherit" 
-                          size="small" 
-                          onClick={() => setShowBiometricPrompt(false)}
-                        >
-                          Ahora no
-                        </Button>
-                      </Box>
-                    }
-                    sx={{
-                      borderRadius: 2,
-                      mb: 2,
-                    }}
-                  >
-                    ¿Quieres usar tu huella digital para entrar más rápido la próxima vez?
-                  </Alert>
-                </Grow>
-              )}
-
-              {/* MENSAJE DE ERROR */}
               {error && (
                 <Grow in={!!error} timeout={500}>
                   <Alert 
@@ -530,13 +252,11 @@ export default function Login() {
                 </Grow>
               )}
 
-              {/* MENSAJE DE ÉXITO */}
               {success && (
                 <Grow in={success} timeout={500}>
                   <Alert 
                     severity="success" 
                     variant="filled"
-                    icon={<CheckCircle />}
                     sx={{
                       borderRadius: 2,
                       bgcolor: theme.palette.secondary.main,
@@ -552,72 +272,6 @@ export default function Login() {
                 </Grow>
               )}
 
-              {/* BOTÓN DE LOGIN BIOMÉTRICO */}
-              {biometricSupported && hasSavedCredentials && !success && (
-                <Zoom in={true} style={{ transitionDelay: '200ms' }}>
-                  <Box sx={{ mb: 2 }}>
-                    <Button
-                      fullWidth
-                      variant="contained"
-                      size="large"
-                      onClick={handleBiometricLogin}
-                      disabled={biometricLoading}
-                      startIcon={biometricLoading ? null : <Fingerprint />}
-                      sx={{
-                        py: 1.8,
-                        fontSize: '1rem',
-                        borderRadius: 2,
-                        background: 'linear-gradient(135deg, #00bfa5 0%, #00796b 100%)',
-                        color: '#fff',
-                        fontWeight: 600,
-                        boxShadow: '0 4px 12px rgba(0, 191, 165, 0.3)',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          background: 'linear-gradient(135deg, #00897b 0%, #004d40 100%)',
-                          transform: 'translateY(-2px)',
-                          boxShadow: '0 6px 16px rgba(0, 191, 165, 0.4)'
-                        },
-                        '&:active': {
-                          transform: 'translateY(0)',
-                        }
-                      }}
-                    >
-                      {biometricLoading ? (
-                        <CircularProgress size={24} sx={{ color: '#fff' }} />
-                      ) : (
-                        'Entrar con Huella Digital'
-                      )}
-                    </Button>
-                    
-                    {/* Botón para desactivar biometría */}
-                    <Button
-                      size="small"
-                      onClick={disableBiometric}
-                      sx={{ 
-                        mt: 1, 
-                        fontSize: '0.75rem',
-                        color: 'text.secondary',
-                        '&:hover': {
-                          color: 'error.main'
-                        }
-                      }}
-                    >
-                      Desactivar huella digital
-                    </Button>
-                  </Box>
-                </Zoom>
-              )}
-
-              {/* DIVISOR "O" */}
-              {biometricSupported && hasSavedCredentials && !success && (
-                <Fade in={true} timeout={800}>
-                  <Divider sx={{ my: 2 }}>
-                    <Chip label="O continuar con" size="small" />
-                  </Divider>
-                </Fade>
-              )}
-
-              {/* CAMPO DE EMAIL */}
               <AnimatedTextField
                 label="Correo electrónico"
                 type="email"
@@ -627,7 +281,6 @@ export default function Login() {
                 icon={<Email sx={{ color: theme.palette.primary.main }} />}
               />
 
-              {/* CAMPO DE CONTRASEÑA */}
               <AnimatedTextField
                 label="Contraseña"
                 type={showPassword ? 'text' : 'password'}
@@ -652,17 +305,14 @@ export default function Login() {
                 }
               />
 
-              {/* LINK DE OLVIDÉ MI CONTRASEÑA */}
               <ForgotPasswordLink />
 
-              {/* RECAPTCHA */}
               <ReCAPTCHA
                 sitekey={SITE_KEY}
                 onChange={(token) => setRecaptchaToken(token || '')}
                 style={{ margin: '16px 0' }}
               />
 
-              {/* BOTÓN DE LOGIN TRADICIONAL */}
               <Zoom in={true} style={{ transitionDelay: '600ms' }}>
                 <Button
                   type="submit"
@@ -699,24 +349,6 @@ export default function Login() {
                 </Button>
               </Zoom>
 
-              {/* INFO SOBRE BIOMETRÍA DISPONIBLE */}
-              {biometricSupported && !hasSavedCredentials && !checkingBiometric && (
-                <Fade in={true} timeout={1000}>
-                  <Alert 
-                    severity="info" 
-                    icon={<Fingerprint />}
-                    sx={{ 
-                      mt: 2,
-                      borderRadius: 2,
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    Después de iniciar sesión, podrás activar el acceso con huella digital
-                  </Alert>
-                </Fade>
-              )}
-
-              {/* LINK DE REGISTRO */}
               <Fade in={true} style={{ transitionDelay: '900ms' }}>
                 <Box sx={{ textAlign: 'center', mt: 4 }}>
                   <Typography variant="body1">

@@ -2,6 +2,7 @@ import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../contexts/AuthContext';
 import { API_CONFIG } from '../../config/api.js';
+import apiClient from '../../config/api.js';
 import {
   TextField,
   Button,
@@ -40,7 +41,8 @@ import {
   KeyboardArrowRight,
   KeyboardArrowLeft,
   PhotoCamera,
-  Save
+  Save,
+  Fingerprint
 } from '@mui/icons-material';
 import { theme } from '../../theme/palette';
 
@@ -115,6 +117,9 @@ export default function Register() {
     password: '',
     confirmPassword: ''
   });
+  const [fingerprintRegistered, setFingerprintRegistered] = useState(false);
+  const [isRegisteringFingerprint, setIsRegisteringFingerprint] = useState(false);
+  const [webauthnCredentialId, setWebauthnCredentialId] = useState(null);
   
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -235,6 +240,174 @@ export default function Register() {
     }
   };
 
+  // Funciones auxiliares para WebAuthn
+  const base64UrlToArrayBuffer = (base64Url) => {
+    // Convertir base64url a base64
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = base64.length % 4;
+    const paddedBase64 = base64 + '='.repeat(pad === 0 ? 0 : 4 - pad);
+    
+    // Convertir base64 a binario string
+    const binaryString = window.atob(paddedBase64);
+    
+    // Convertir binario string a ArrayBuffer
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  };
+
+  const arrayBufferToBase64Url = (buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = window.btoa(binary);
+    // Convertir base64 a base64url
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  };
+
+  // Función para verificar si WebAuthn está disponible
+  const isWebAuthnAvailable = () => {
+    return (
+      typeof window !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      navigator.credentials &&
+      navigator.credentials.create &&
+      window.PublicKeyCredential
+    );
+  };
+
+  const handleRegisterFingerprint = async () => {
+    setIsRegisteringFingerprint(true);
+    setError('');
+    
+    try {
+      // Verificar si WebAuthn está disponible
+      if (!isWebAuthnAvailable()) {
+        throw new Error(
+          'Tu navegador no soporta autenticación biométrica. ' +
+          'Por favor, usa un navegador moderno como Chrome, Firefox, Edge o Safari (versión 14+).'
+        );
+      }
+
+      // Validar que el usuario tenga email (necesario para WebAuthn)
+      if (!formData.email || !formData.email.trim()) {
+        throw new Error('Por favor, ingresa tu correo electrónico primero para registrar la huella digital.');
+      }
+
+      // Obtener el challenge del backend
+      // NOTA: Esta ruta aún no existe en el backend, la crearemos después
+      const challengeResponse = await apiClient.post(`${API_CONFIG.WEBAUTHN_URL}/register/begin`, {
+        email: formData.email,
+        username: `${formData.nombre} ${formData.apellidoPaterno}`.trim() || formData.email
+      });
+
+      if (!challengeResponse.data.success) {
+        throw new Error(challengeResponse.data.message || 'Error al iniciar el registro de huella');
+      }
+
+      const { challenge, user, rp } = challengeResponse.data;
+
+      // Convertir el challenge de base64url a ArrayBuffer
+      const challengeArrayBuffer = base64UrlToArrayBuffer(challenge);
+
+      // Convertir el user.id de base64url a ArrayBuffer
+      const userIdArrayBuffer = base64UrlToArrayBuffer(user.id);
+
+      // Preparar las opciones para crear la credencial
+      const publicKeyCredentialCreationOptions = {
+        challenge: challengeArrayBuffer,
+        rp: {
+          name: rp.name || 'Sistema de Gestión Académica',
+          id: rp.id || window.location.hostname,
+        },
+        user: {
+          id: userIdArrayBuffer,
+          name: user.name || formData.email,
+          displayName: user.displayName || `${formData.nombre} ${formData.apellidoPaterno}`.trim() || formData.email,
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: 'public-key' }, // ES256
+          { alg: -257, type: 'public-key' }, // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform', // Usar autenticador integrado (huella del dispositivo)
+          userVerification: 'required',
+          requireResidentKey: false,
+        },
+        timeout: 60000, // 60 segundos
+        attestation: 'direct',
+      };
+
+      // Solicitar al navegador crear la credencial (el usuario pondrá su huella)
+      let credential;
+      try {
+        credential = await navigator.credentials.create({
+          publicKey: publicKeyCredentialCreationOptions,
+        });
+      } catch (webauthnError) {
+        // Manejar errores específicos de WebAuthn
+        if (webauthnError.name === 'NotAllowedError') {
+          throw new Error('Registro cancelado o el dispositivo no está disponible. Por favor, intenta de nuevo.');
+        } else if (webauthnError.name === 'InvalidStateError') {
+          throw new Error('Ya existe una huella registrada para este dispositivo. Por favor, usa otro dispositivo o elimina la credencial existente.');
+        } else if (webauthnError.name === 'NotSupportedError') {
+          throw new Error('Tu dispositivo no soporta autenticación biométrica. Por favor, usa un dispositivo compatible.');
+        } else if (webauthnError.name === 'SecurityError') {
+          throw new Error('Error de seguridad. Asegúrate de estar usando HTTPS o localhost.');
+        } else {
+          throw new Error(`Error al capturar la huella: ${webauthnError.message}`);
+        }
+      }
+
+      // Convertir la respuesta a un formato que el backend pueda entender
+      const response = {
+        id: credential.id,
+        rawId: arrayBufferToBase64Url(credential.rawId),
+        type: credential.type,
+        response: {
+          clientDataJSON: arrayBufferToBase64Url(credential.response.clientDataJSON),
+          attestationObject: arrayBufferToBase64Url(credential.response.attestationObject),
+        },
+      };
+
+      // Enviar la respuesta al backend para validación y almacenamiento
+      // NOTA: Esta ruta aún no existe en el backend, la crearemos después
+      const verifyResponse = await apiClient.post(`${API_CONFIG.WEBAUTHN_URL}/register/complete`, {
+        email: formData.email,
+        credential: response,
+      });
+
+      if (!verifyResponse.data.success) {
+        throw new Error(verifyResponse.data.message || 'Error al verificar la huella digital');
+      }
+
+      // Guardar el ID de la credencial para enviarlo con el registro del usuario
+      setWebauthnCredentialId(verifyResponse.data.credentialId);
+      setFingerprintRegistered(true);
+
+    } catch (err) {
+      console.error('Error al registrar huella:', err);
+      
+      // Mostrar mensaje de error más específico
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.message) {
+        setError(err.message);
+      } else {
+        setError('Error al registrar la huella digital. Por favor, intenta de nuevo.');
+      }
+      
+      setFingerprintRegistered(false);
+      setWebauthnCredentialId(null);
+    } finally {
+      setIsRegisteringFingerprint(false);
+    }
+  };
+
   const handleNext = () => {
     setActiveStep((prevStep) => prevStep + 1);
   };
@@ -258,6 +431,14 @@ export default function Register() {
         throw new Error('Por favor selecciona un rol (Docente o Administrador)');
       }
 
+      if (!fingerprintRegistered) {
+        throw new Error('Por favor registra tu huella digital antes de continuar');
+      }
+
+      if (!webauthnCredentialId) {
+        throw new Error('No se encontró el ID de la credencial de huella digital. Por favor, registra tu huella nuevamente.');
+      }
+
       const formDataToSend = new FormData();
       
       // Asegurarnos que el role se envía correctamente
@@ -266,6 +447,9 @@ export default function Register() {
           formDataToSend.append(key, formData[key]);
         }
       });
+      
+      // Agregar el ID de la credencial WebAuthn
+      formDataToSend.append('webauthnCredentialId', webauthnCredentialId);
       
       if (foto) {
         formDataToSend.append('fotoPerfil', foto);
@@ -495,6 +679,92 @@ export default function Register() {
                 {!formData.role ? 'Por favor selecciona un rol' : ''}
               </FormHelperText>
             </FormControl>
+
+            <Box sx={{ mt: 3, mb: 2 }}>
+              <Grow in={true} style={{ transformOrigin: '0 0 0' }} timeout={700}>
+                <Box
+                  sx={{
+                    p: 2,
+                    border: `2px dashed ${fingerprintRegistered ? theme.palette.success.main : theme.palette.primary.main}`,
+                    borderRadius: 2,
+                    backgroundColor: fingerprintRegistered ? theme.palette.success.light + '20' : 'transparent',
+                    textAlign: 'center'
+                  }}
+                >
+                  <Typography variant="body1" gutterBottom sx={{ mb: 2, fontWeight: 'bold' }}>
+                    Registro de Huella Digital {fingerprintRegistered && '✓'}
+                  </Typography>
+                  
+                  {!fingerprintRegistered ? (
+                    <>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Es obligatorio registrar tu huella digital para completar el registro.
+                        <br />
+                        <Typography component="span" variant="caption" color="text.secondary">
+                          Usará la autenticación biométrica de tu dispositivo (huella dactilar o Face ID).
+                        </Typography>
+                      </Typography>
+                      
+                      {!isWebAuthnAvailable() && (
+                        <Alert severity="warning" sx={{ mb: 2, textAlign: 'left' }}>
+                          Tu navegador podría no soportar autenticación biométrica. 
+                          Asegúrate de usar Chrome, Firefox, Edge o Safari (versión 14+).
+                        </Alert>
+                      )}
+
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<Fingerprint />}
+                        onClick={handleRegisterFingerprint}
+                        disabled={isRegisteringFingerprint || !formData.role || !formData.email}
+                        sx={{
+                          minWidth: 250,
+                          py: 1.5,
+                          fontSize: '1rem',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {isRegisteringFingerprint ? (
+                          <>
+                            <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} />
+                            Coloca tu huella...
+                          </>
+                        ) : (
+                          'Registrar Huella Digital'
+                        )}
+                      </Button>
+                      {!formData.role && (
+                        <Typography variant="caption" color="error" display="block" sx={{ mt: 1 }}>
+                          Por favor selecciona un rol primero
+                        </Typography>
+                      )}
+                      {!formData.email && (
+                        <Typography variant="caption" color="error" display="block" sx={{ mt: 1 }}>
+                          Por favor ingresa tu correo electrónico primero
+                        </Typography>
+                      )}
+                    </>
+                  ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                      <Fingerprint sx={{ fontSize: 48, color: theme.palette.success.main }} />
+                      <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
+                        Huella digital registrada correctamente
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        onClick={() => setFingerprintRegistered(false)}
+                        sx={{ mt: 1 }}
+                      >
+                        Volver a registrar
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              </Grow>
+            </Box>
           </Box>
         );
       default:

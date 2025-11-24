@@ -16,11 +16,11 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password, captchaToken) => {
     try {
-    const response = await apiClient.post('/api/auth/login', {
-      email,
-      password,
-      captchaToken
-    });
+      const response = await apiClient.post('/api/auth/login', {
+        email,
+        password,
+        captchaToken
+      });
 
       const { token, user } = response.data;
       if (token) {
@@ -28,12 +28,12 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user', JSON.stringify(user));
         setCurrentUser(user);
         setRetryCount(0); // Reset retry count on successful login
-        
+
         // Determinar la ruta de redirección basada en el rol
         const redirectPath = user.role === 'admin' ? '/admin-structure' : '/dashboard';
         return { success: true, user, redirectPath };
       }
-      
+
       throw new Error('Credenciales inválidas');
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Error al iniciar sesión');
@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-              const response = await apiClient.post('/api/auth/register', userData, {
+      const response = await apiClient.post('/api/auth/register', userData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         }
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }) => {
   const verifyToken = useCallback(async () => {
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
-    
+
     if (!token || !savedUser) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -99,16 +99,16 @@ export const AuthProvider = ({ children }) => {
       const response = await apiClient.get('/api/auth/verify', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       const userData = response.data.user;
       localStorage.setItem('user', JSON.stringify(userData));
       setCurrentUser(userData);
       setRetryCount(0); // Reset retry count on successful verification
       setLoading(false);
-      
+
     } catch (error) {
       console.error('Error verificando token:', error);
-      
+
       // Si el error es de autenticación y no hemos excedido los reintentos
       if (error.response?.status === 401 && retryCount < 3) {
         setRetryCount(prev => prev + 1);
@@ -116,7 +116,7 @@ export const AuthProvider = ({ children }) => {
         setTimeout(verifyToken, 1000);
         return;
       }
-      
+
       // Si excedimos los reintentos o es otro tipo de error, limpiamos todo
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -142,13 +142,13 @@ export const AuthProvider = ({ children }) => {
 
   const forgotPassword = async (email) => {
     try {
-              const response = await apiClient.post('/api/auth/forgot-password', {
+      const response = await apiClient.post('/api/auth/forgot-password', {
         email
       });
-      
-      return { 
-        success: true, 
-        message: response.data.message || 'Se ha enviado un enlace de recuperación a tu correo electrónico' 
+
+      return {
+        success: true,
+        message: response.data.message || 'Se ha enviado un enlace de recuperación a tu correo electrónico'
       };
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Error al procesar la solicitud');
@@ -157,32 +157,54 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async (token, newPassword) => {
     try {
-              const response = await apiClient.post('/api/auth/reset-password', {
+      const response = await apiClient.post('/api/auth/reset-password', {
         token,
         newPassword
       });
-      
-      return { 
-        success: true, 
-        message: response.data.message || 'Contraseña restablecida exitosamente' 
+
+      return {
+        success: true,
+        message: response.data.message || 'Contraseña restablecida exitosamente'
       };
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Error al restablecer la contraseña');
     }
   };
 
+  const checkEmailExists = async (email) => {
+    try {
+      const response = await apiClient.post('/api/auth/check-availability', { email });
+      return response.data.exists;
+    } catch (error) {
+      console.error('Error verificando email:', error);
+      return false;
+    }
+  };
+
+  const checkNumeroControlExists = async (numeroControl) => {
+    try {
+      const response = await apiClient.post('/api/auth/check-availability', { numeroControl });
+      return response.data.exists;
+    } catch (error) {
+      console.error('Error verificando numero control:', error);
+      return false;
+    }
+  };
+
   return (
-    <AuthContext.Provider 
-      value={{ 
-        currentUser, 
-        login, 
-        register, 
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        login,
+        register,
         logout,
         loading,
         updateUserProfile,
         forgotPassword,
         resetPassword,
-        verifyToken // Exponemos la función de verificación
+        verifyToken,
+        checkEmailExists,
+        checkNumeroControlExists
       }}
     >
       {!loading && children}
